@@ -625,14 +625,16 @@
 
         .sku-link {
             cursor: pointer;
-            transition: color 0.2s ease;
+            color: var(--primary) !important;
+            transition: all 0.2s ease;
             text-decoration: underline;
-            text-decoration-style: dotted;
-            text-underline-offset: 4px;
+            text-decoration-style: solid;
+            text-underline-offset: 3px;
         }
         
         .sku-link:hover {
             color: var(--secondary) !important;
+            filter: brightness(1.2);
         }
     </style>
 </head>

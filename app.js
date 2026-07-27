@@ -311,7 +311,7 @@ function renderSKUTable(data, filterQuery = '') {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>
-                <span class="sku-cell sku-link" style="color: var(--text-main);" onclick="openSkuModal('${sku}')">
+                <span class="sku-cell sku-link" onclick="openSkuModal('${sku.replace(/'/g, "\\'")}')">
                     ${sku}
                 </span>
             </td>
