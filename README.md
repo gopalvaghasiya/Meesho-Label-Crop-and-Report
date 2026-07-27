@@ -2,6 +2,9 @@
 
 A high-fidelity, fully client-side web application tool to crop Meesho PDF shipping labels and analyze orders to generate SKU-wise and Delivery Partner-wise summaries in real-time.
 
+**🔗 GitHub Repository:** [gopalvaghasiya/Meesho-Label-Crop-and-Report](https://github.com/gopalvaghasiya/Meesho-Label-Crop-and-Report)  
+**⚡ Live Demo Tool:** [Launch Application on GitHub Pages](https://gopalvaghasiya.github.io/Meesho-Label-Crop-and-Report/)
+
 ## Features
 
 - 📥 **Drag-and-Drop Upload:** Drop any multi-page Meesho shipping label PDF directly into the browser.
