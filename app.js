@@ -23,6 +23,12 @@ const partnerTableBody = document.getElementById('partnerTableBody');
 const partnerCountBadge = document.getElementById('partnerCountBadge');
 const previewGrid = document.getElementById('previewGrid');
 
+// Modal Elements
+const skuModal = document.getElementById('skuModal');
+const modalSkuName = document.getElementById('modalSkuName');
+const modalCloseBtn = document.getElementById('modalCloseBtn');
+const modalTableBody = document.getElementById('modalTableBody');
+
 // Drag and drop event listeners
 dropZone.addEventListener('click', () => fileInput.click());
 dropZone.addEventListener('dragover', (e) => {
@@ -86,6 +92,17 @@ downloadBtn.addEventListener('click', () => {
 // Search and filter logic
 searchBar.addEventListener('input', () => {
     renderSKUTable(skuData, searchBar.value.trim());
+});
+
+// Modal Event Listeners
+modalCloseBtn.addEventListener('click', closeSkuModal);
+skuModal.addEventListener('click', (e) => {
+    if (e.target === skuModal) closeSkuModal();
+});
+window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && skuModal.classList.contains('active')) {
+        closeSkuModal();
+    }
 });
 
 // Process uploaded file
@@ -168,7 +185,7 @@ async function parsePDF(pdfData) {
     const skuMap = {};
     const partnerMap = {};
     
-    // Regular expression matching Meesho SKUs (allowing spaces) and product details table format
+    // Regular expression matching Meesho SKUs and product details table format
     const skuPattern = /^(.*?)\s+(Free\s+Size|Size\s+\w+|[A-Z0-9\-]+)\s+(\d+)\s+([A-Za-z]+)\s+(\d{15,20}_\d+)$/i;
     
     for (let i = 1; i <= numPages; i++) {
@@ -178,18 +195,16 @@ async function parsePDF(pdfData) {
         
         let foundSku = false;
         let qty = 1; // Default
+        let skuName = '';
+        let orderNo = 'Unknown';
         
         // SKU Extraction
         for (const line of lines) {
             const match = line.trim().match(skuPattern);
             if (match) {
-                const sku = match[1].trim();
+                skuName = match[1].trim();
                 qty = parseInt(match[3], 10);
-                if (!skuMap[sku]) {
-                    skuMap[sku] = { qty: 0, orders: 0 };
-                }
-                skuMap[sku].qty += qty;
-                skuMap[sku].orders += 1;
+                orderNo = match[5].trim();
                 foundSku = true;
                 break;
             }
@@ -207,23 +222,45 @@ async function parsePDF(pdfData) {
             if (headerIdx !== -1 && headerIdx + 1 < lines.length) {
                 const parts = lines[headerIdx + 1].trim().split(/\s+/);
                 if (parts.length >= 3) {
-                    const sku = parts[0].trim();
+                    skuName = parts[0].trim();
                     let qtyIndex = 2;
                     if (parts[1].toLowerCase() === 'free' && parts[2].toLowerCase() === 'size') {
                         qtyIndex = 3;
                     }
                     const parsedQty = parseInt(parts[qtyIndex], 10);
-                    if (sku && !isNaN(parsedQty)) {
+                    if (skuName && !isNaN(parsedQty)) {
                         qty = parsedQty;
-                        if (!skuMap[sku]) {
-                            skuMap[sku] = { qty: 0, orders: 0 };
-                        }
-                        skuMap[sku].qty += qty;
-                        skuMap[sku].orders += 1;
+                        orderNo = parts[parts.length - 1] || 'Unknown';
                         foundSku = true;
                     }
                 }
             }
+        }
+        
+        // Customer Name Extraction
+        let customerName = 'Unknown';
+        for (let j = 0; j < lines.length; j++) {
+            if (lines[j].toLowerCase().includes('customer address')) {
+                if (j + 1 < lines.length) {
+                    customerName = lines[j + 1].trim();
+                    break;
+                }
+            }
+        }
+        
+        // Add to SKU Map
+        if (foundSku) {
+            if (!skuMap[skuName]) {
+                skuMap[skuName] = { qty: 0, orders: 0, details: [] };
+            }
+            skuMap[skuName].qty += qty;
+            skuMap[skuName].orders += 1;
+            skuMap[skuName].details.push({
+                customer: customerName,
+                orderNo: orderNo,
+                qty: qty,
+                page: i
+            });
         }
         
         // Delivery Partner Detection
@@ -273,7 +310,11 @@ function renderSKUTable(data, filterQuery = '') {
         
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td class="sku-cell">${sku}</td>
+            <td>
+                <span class="sku-cell sku-link" style="color: var(--text-main);" onclick="openSkuModal('${sku}')">
+                    ${sku}
+                </span>
+            </td>
             <td class="qty-cell">${item.qty}</td>
             <td>${item.orders}</td>
         `;
@@ -355,6 +396,32 @@ function renderPartnerTable(data) {
     }
 }
 
+// Modal actions
+function openSkuModal(sku) {
+    const item = skuData[sku];
+    if (!item) return;
+    
+    modalSkuName.textContent = sku;
+    modalTableBody.innerHTML = '';
+    
+    item.details.forEach(order => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td style="color: #fff; font-weight: 600;">${order.customer}</td>
+            <td style="font-family: monospace; font-size: 0.9rem;">${order.orderNo}</td>
+            <td class="qty-cell">${order.qty}</td>
+            <td>Page ${order.page}</td>
+        `;
+        modalTableBody.appendChild(row);
+    });
+    
+    skuModal.classList.add('active');
+}
+
+function closeSkuModal() {
+    skuModal.classList.remove('active');
+}
+
 // Crop the top portion of the PDF using PDF-lib
 async function cropPDF(pdfBytes, cropPercentage) {
     const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
@@ -421,6 +488,7 @@ function showLoading(text) {
     statusText.textContent = text;
 }
 
+// Show success status
 function showSuccess(text) {
     statusBadge.style.display = 'flex';
     statusBadge.className = 'status-badge success';
