@@ -168,8 +168,8 @@ async function parsePDF(pdfData) {
     const skuMap = {};
     const partnerMap = {};
     
-    // Regular expression matching Meesho SKUs and product details table format
-    const skuPattern = /([A-Z0-9\-]+)\s+(Free\s+Size|Size\s+\w+)?\s+(\d+)\s+([A-Za-z]+)\s+(\d{15,20}_\d+)/i;
+    // Regular expression matching Meesho SKUs (allowing spaces) and product details table format
+    const skuPattern = /^(.*?)\s+(Free\s+Size|Size\s+\w+|[A-Z0-9\-]+)\s+(\d+)\s+([A-Za-z]+)\s+(\d{15,20}_\d+)$/i;
     
     for (let i = 1; i <= numPages; i++) {
         const page = await pdf.getPage(i);
@@ -181,7 +181,7 @@ async function parsePDF(pdfData) {
         
         // SKU Extraction
         for (const line of lines) {
-            const match = line.match(skuPattern);
+            const match = line.trim().match(skuPattern);
             if (match) {
                 const sku = match[1].trim();
                 qty = parseInt(match[3], 10);
