@@ -6,6 +6,7 @@ let currentPdfBytes = null;
 let croppedPdfBytes = null;
 let skuData = {};
 let partnerData = {};
+let pagesInfo = [];
 
 // DOM Elements
 const dropZone = document.getElementById('dropZone');
@@ -66,9 +67,9 @@ cropHeightSlider.addEventListener('change', async (e) => {
     showLoading('Cropping PDF and updating previews...');
     try {
         const cropVal = parseInt(e.target.value, 10);
-        croppedPdfBytes = await cropPDF(currentPdfBytes.slice(0), cropVal);
+        croppedPdfBytes = await cropAndSortPDF(currentPdfBytes.slice(0), cropVal, pagesInfo);
         await renderPreviews(croppedPdfBytes.slice(0));
-        showSuccess('PDF Cropped successfully!');
+        showSuccess('PDF Cropped & Sorted successfully!');
     } catch (err) {
         console.error(err);
         showSuccess('Error adjusting crop height.');
@@ -118,13 +119,14 @@ async function handleFile(file) {
         const parsed = await parsePDF(currentPdfBytes.slice(0));
         skuData = parsed.skuMap;
         partnerData = parsed.partnerMap;
+        pagesInfo = parsed.pagesInfo;
         
         renderSKUTable(skuData);
         renderPartnerTable(partnerData);
         
-        showLoading('Cropping shipping labels...');
+        showLoading('Cropping and sorting shipping labels...');
         const initialCropHeight = parseInt(cropHeightSlider.value, 10);
-        croppedPdfBytes = await cropPDF(currentPdfBytes.slice(0), initialCropHeight);
+        croppedPdfBytes = await cropAndSortPDF(currentPdfBytes.slice(0), initialCropHeight, pagesInfo);
         
         showLoading('Generating previews...');
         await renderPreviews(croppedPdfBytes.slice(0));
@@ -184,6 +186,7 @@ async function parsePDF(pdfData) {
     const numPages = pdf.numPages;
     const skuMap = {};
     const partnerMap = {};
+    const pagesInfoList = [];
     
     // Regular expression matching Meesho SKUs and product details table format
     const skuPattern = /^(.*?)\s+(Free\s+Size|Size\s+\w+|[A-Z0-9\-]+)\s+(\d+)\s+([A-Za-z]+)\s+(\d{15,20}_\d+)$/i;
@@ -263,6 +266,12 @@ async function parsePDF(pdfData) {
             });
         }
         
+        // Store page mapping details for sorting
+        pagesInfoList.push({
+            pageIndex: i - 1,
+            sku: foundSku ? skuName : 'ZZZ_Unknown'
+        });
+        
         // Delivery Partner Detection
         let partner = 'Other/Unknown';
         for (const line of lines) {
@@ -286,7 +295,7 @@ async function parsePDF(pdfData) {
         partnerMap[partner].qty += qty;
         partnerMap[partner].orders += 1;
     }
-    return { skuMap, partnerMap };
+    return { skuMap, partnerMap, pagesInfo: pagesInfoList };
 }
 
 // Render SKU Report Table
@@ -422,21 +431,27 @@ function closeSkuModal() {
     skuModal.classList.remove('active');
 }
 
-// Crop the top portion of the PDF using PDF-lib
-async function cropPDF(pdfBytes, cropPercentage) {
-    const pdfDoc = await PDFLib.PDFDocument.load(pdfBytes);
-    const pages = pdfDoc.getPages();
+// Crop and sort PDF pages SKU-wise
+async function cropAndSortPDF(pdfBytes, cropPercentage, pageList) {
+    const srcDoc = await PDFLib.PDFDocument.load(pdfBytes);
+    const destDoc = await PDFLib.PDFDocument.create();
     
-    for (const page of pages) {
-        const { width, height } = page.getSize();
+    // Sort page list by SKU name alphabetically
+    const sortedPages = [...pageList].sort((a, b) => a.sku.localeCompare(b.sku));
+    
+    for (const info of sortedPages) {
+        const [copiedPage] = await destDoc.copyPages(srcDoc, [info.pageIndex]);
+        
+        const { width, height } = copiedPage.getSize();
         const keepRatio = cropPercentage / 100;
         const cropY = height * (1 - keepRatio);
         const cropHeight = height * keepRatio;
         
-        page.setCropBox(0, cropY, width, cropHeight);
+        copiedPage.setCropBox(0, cropY, width, cropHeight);
+        destDoc.addPage(copiedPage);
     }
     
-    return await pdfDoc.save();
+    return await destDoc.save();
 }
 
 // Render cropped previews on screen
@@ -501,6 +516,7 @@ function resetApp() {
     croppedPdfBytes = null;
     skuData = {};
     partnerData = {};
+    pagesInfo = [];
     
     fileInput.value = '';
     statusBadge.style.display = 'none';
